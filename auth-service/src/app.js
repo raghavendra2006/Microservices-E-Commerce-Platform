@@ -1,5 +1,6 @@
 const express = require('express');
 const helmet = require('helmet');
+const compression = require('compression');
 const authRoutes = require('./routes/authRoutes');
 const { loggerMiddleware } = require('./middleware/logger');
 
@@ -11,6 +12,7 @@ if (!process.env.JWT_SECRET || !process.env.INTERNAL_SERVICE_KEY || !process.env
 const app = express();
 
 app.use(helmet());
+app.use(compression());
 
 app.use(express.json());
 app.use(loggerMiddleware);

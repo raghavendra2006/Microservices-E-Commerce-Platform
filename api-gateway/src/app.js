@@ -1,5 +1,6 @@
 const express = require('express');
 const helmet = require('helmet');
+const compression = require('compression');
 const { correlationIdMiddleware } = require('./middleware/correlationId');
 const { rateLimiterMiddleware } = require('./middleware/rateLimiter');
 const { loggerMiddleware } = require('./middleware/logger');
@@ -19,6 +20,7 @@ if (!AUTH_SERVICE_URL || !PRODUCT_SERVICE_URL || !ORDER_SERVICE_URL || !PAYMENT_
 }
 
 app.use(helmet());
+app.use(compression());
 app.use(express.json());
 app.use(correlationIdMiddleware);
 app.use(loggerMiddleware);

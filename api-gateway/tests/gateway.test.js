@@ -17,6 +17,12 @@ jest.mock('uuid', () => ({
   v4: () => 'mocked-uuid-1234'
 }));
 
+// Mock rate limiter
+jest.mock('../src/middleware/rateLimiter', () => ({
+  rateLimiterMiddleware: (req, res, next) => next(),
+  redisClient: { connect: jest.fn().mockResolvedValue() }
+}));
+
 const app = require('../src/app');
 
 describe('API Gateway', () => {

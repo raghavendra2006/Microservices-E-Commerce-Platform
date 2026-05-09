@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_users_provider_id ON users(provider_id);
+
 -- Seed admin user
 INSERT INTO users (id, email, name, provider, provider_id, role)
 VALUES (

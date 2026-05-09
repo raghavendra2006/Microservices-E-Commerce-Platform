@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS products (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at DESC);
+
 -- Seed sample products
 INSERT INTO products (id, name, description, price, stock)
 VALUES
