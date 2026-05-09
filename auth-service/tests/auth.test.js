@@ -1,3 +1,7 @@
+process.env.DATABASE_URL = 'test';
+process.env.INTERNAL_SERVICE_KEY = 'test';
+process.env.JWT_SECRET = 'test-secret';
+
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
 

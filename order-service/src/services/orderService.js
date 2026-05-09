@@ -1,8 +1,28 @@
 const axios = require('axios');
+const axiosRetry = require('axios-retry').default;
+const CircuitBreaker = require('opossum');
 const orderRepository = require('../repositories/orderRepository');
+const { logger } = require('../middleware/logger');
 
-const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL || 'http://product-service:3002';
-const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || 'dev-internal-service-key-2024';
+const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL;
+const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY;
+
+const productAxios = axios.create({ timeout: 10000 });
+axiosRetry(productAxios, { 
+  retries: 3, 
+  retryDelay: axiosRetry.exponentialDelay,
+  retryCondition: (error) => {
+    return axiosRetry.isNetworkOrIdempotentRequestError(error) || error.code === 'ECONNABORTED';
+  }
+});
+
+const breaker = new CircuitBreaker(async (config) => {
+  return productAxios(config);
+}, {
+  timeout: 10000,
+  errorThresholdPercentage: 50,
+  resetTimeout: 30000
+});
 
 class OrderService {
   async createOrder(userId, items, correlationId) {
@@ -16,7 +36,9 @@ class OrderService {
     const productDetails = [];
     for (const item of items) {
       try {
-        const response = await axios.get(`${PRODUCT_SERVICE_URL}/products/${item.productId}`, {
+        const response = await breaker.fire({
+          method: 'GET',
+          url: `${PRODUCT_SERVICE_URL}/products/${item.productId}`,
           headers: {
             'X-Internal-Service-Key': INTERNAL_SERVICE_KEY,
             'X-Request-ID': correlationId
@@ -51,41 +73,36 @@ class OrderService {
     const deducted = [];
     try {
       for (const detail of productDetails) {
-        await axios.patch(
-          `${PRODUCT_SERVICE_URL}/products/${detail.productId}/inventory`,
-          { quantity: -detail.quantity },
-          {
-            headers: {
-              'X-Internal-Service-Key': INTERNAL_SERVICE_KEY,
-              'X-Request-ID': correlationId
-            }
+        await breaker.fire({
+          method: 'PATCH',
+          url: `${PRODUCT_SERVICE_URL}/products/${detail.productId}/inventory`,
+          data: { quantity: -detail.quantity },
+          headers: {
+            'X-Internal-Service-Key': INTERNAL_SERVICE_KEY,
+            'X-Request-ID': correlationId
           }
-        );
+        });
         deducted.push(detail);
       }
     } catch (error) {
       // Rollback deducted stock on failure
       for (const item of deducted) {
         try {
-          await axios.patch(
-            `${PRODUCT_SERVICE_URL}/products/${item.productId}/inventory`,
-            { quantity: item.quantity },
-            {
-              headers: {
-                'X-Internal-Service-Key': INTERNAL_SERVICE_KEY,
-                'X-Request-ID': correlationId
-              }
+          await breaker.fire({
+            method: 'PATCH',
+            url: `${PRODUCT_SERVICE_URL}/products/${item.productId}/inventory`,
+            data: { quantity: item.quantity },
+            headers: {
+              'X-Internal-Service-Key': INTERNAL_SERVICE_KEY,
+              'X-Request-ID': correlationId
             }
-          );
+          });
         } catch (rollbackError) {
-          console.error(JSON.stringify({
-            level: 'error',
-            message: 'Failed to rollback stock deduction',
+          logger.error({
+            err: rollbackError,
             correlationId,
             productId: item.productId,
-            service: 'order-service',
-            timestamp: new Date().toISOString()
-          }));
+          }, 'Failed to rollback stock deduction');
         }
       }
 

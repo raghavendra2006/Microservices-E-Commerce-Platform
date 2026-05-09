@@ -1,6 +1,20 @@
 const express = require('express');
 const router = express.Router();
+const Joi = require('joi');
 const orderService = require('../services/orderService');
+
+const orderSchema = Joi.object({
+  items: Joi.array().items(
+    Joi.object({
+      productId: Joi.string().required(),
+      quantity: Joi.number().integer().min(1).required()
+    })
+  ).min(1).required()
+});
+
+const statusSchema = Joi.object({
+  status: Joi.string().valid('PENDING', 'PAID', 'FAILED', 'SHIPPED', 'DELIVERED', 'CANCELLED').required()
+});
 
 // POST /orders - Create order
 router.post('/', async (req, res, next) => {
@@ -12,16 +26,12 @@ router.post('/', async (req, res, next) => {
       return res.status(401).json({ error: 'User ID is required' });
     }
 
-    console.log(JSON.stringify({
-      level: 'info',
-      message: 'Creating order',
-      correlationId,
-      userId,
-      service: 'order-service',
-      timestamp: new Date().toISOString()
-    }));
+    const { error, value } = orderSchema.validate(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message });
 
-    const order = await orderService.createOrder(userId, req.body.items, correlationId);
+    if (req.log) req.log.info({ userId }, 'Creating order');
+
+    const order = await orderService.createOrder(userId, value.items, correlationId);
     res.status(201).json(order);
   } catch (error) {
     next(error);
@@ -55,17 +65,11 @@ router.get('/:id', async (req, res, next) => {
 router.patch('/:id/status', async (req, res, next) => {
   try {
     const correlationId = req.headers['x-request-id'] || 'unknown';
-    const { status } = req.body;
+    const { error, value } = statusSchema.validate(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message });
+    const { status } = value;
 
-    console.log(JSON.stringify({
-      level: 'info',
-      message: 'Updating order status',
-      correlationId,
-      orderId: req.params.id,
-      newStatus: status,
-      service: 'order-service',
-      timestamp: new Date().toISOString()
-    }));
+    if (req.log) req.log.info({ orderId: req.params.id, newStatus: status }, 'Updating order status');
 
     const order = await orderService.updateOrderStatus(req.params.id, status);
     res.json(order);

@@ -1,21 +1,34 @@
 const axios = require('axios');
+const axiosRetry = require('axios-retry').default;
+const CircuitBreaker = require('opossum');
 
-const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || 'dev-internal-service-key-2024';
+const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY;
+
+const proxyAxios = axios.create({ timeout: 30000 });
+axiosRetry(proxyAxios, { 
+  retries: 3, 
+  retryDelay: axiosRetry.exponentialDelay,
+  retryCondition: (error) => {
+    return axiosRetry.isNetworkOrIdempotentRequestError(error) || error.code === 'ECONNABORTED';
+  }
+});
+
+const breaker = new CircuitBreaker(async (config) => {
+  return proxyAxios(config);
+}, {
+  timeout: 30000,
+  errorThresholdPercentage: 50,
+  resetTimeout: 30000
+});
 
 async function proxyRequest(req, res, targetBaseUrl, targetPath) {
   const correlationId = req.headers['x-request-id'] || 'unknown';
   const url = `${targetBaseUrl}${targetPath}`;
 
   try {
-    console.log(JSON.stringify({
-      level: 'info',
-      message: `Proxying request to ${url}`,
-      correlationId,
-      service: 'api-gateway',
-      method: req.method,
-      timestamp: new Date().toISOString()
-    }));
-
+    if (req.log) {
+      req.log.info(`Proxying request to ${url}`);
+    }
     const headers = {
       'Content-Type': 'application/json',
       'X-Internal-Service-Key': INTERNAL_SERVICE_KEY,
@@ -28,14 +41,13 @@ async function proxyRequest(req, res, targetBaseUrl, targetPath) {
     if (req.headers['x-user-role']) headers['X-User-Role'] = req.headers['x-user-role'];
     if (req.headers['authorization']) headers['Authorization'] = req.headers['authorization'];
 
-    const response = await axios({
+    const response = await breaker.fire({
       method: req.method,
       url,
       data: ['POST', 'PUT', 'PATCH'].includes(req.method) ? req.body : undefined,
       params: req.query,
       headers,
-      timeout: 30000,
-      validateStatus: () => true // Don't throw on any status
+      validateStatus: () => true // Forward all HTTP statuses
     });
 
     // Forward specific response headers
@@ -51,15 +63,15 @@ async function proxyRequest(req, res, targetBaseUrl, targetPath) {
       res.end();
     }
   } catch (error) {
-    console.log(JSON.stringify({
-      level: 'error',
-      message: `Proxy error: ${error.message}`,
-      correlationId,
-      service: 'api-gateway',
-      targetUrl: url,
-      timestamp: new Date().toISOString()
-    }));
-    res.status(502).json({ error: 'Bad Gateway: Service unavailable' });
+    if (req.log) {
+      req.log.error({ err: error, targetUrl: url }, `Proxy error: ${error.message}`);
+    }
+    
+    if (error.name === 'CircuitBreakerOpenException') {
+      res.status(503).json({ error: 'Service Unavailable: Circuit breaker is open' });
+    } else {
+      res.status(502).json({ error: 'Bad Gateway: Service unavailable' });
+    }
   }
 }
 

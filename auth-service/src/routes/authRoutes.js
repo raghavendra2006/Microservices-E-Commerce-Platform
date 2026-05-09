@@ -1,25 +1,31 @@
 const express = require('express');
 const router = express.Router();
+const Joi = require('joi');
 const authService = require('../services/authService');
+
+const tokenSchema = Joi.object({
+  email: Joi.string().email().required(),
+  name: Joi.string().required(),
+  provider: Joi.string().optional(),
+  providerId: Joi.string().optional()
+});
+
+const validateSchema = Joi.object({
+  token: Joi.string().required()
+});
 
 // POST /auth/token - Mock OAuth flow
 router.post('/token', async (req, res, next) => {
   try {
-    const { email, name, provider, providerId } = req.body;
-    const correlationId = req.headers['x-request-id'] || 'unknown';
-
-    if (!email || !name) {
-      return res.status(400).json({ error: 'Email and name are required' });
+    const { error, value } = tokenSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: error.details[0].message });
     }
+    const { email, name, provider, providerId } = value;
 
-    console.log(JSON.stringify({
-      level: 'info',
-      message: 'Processing OAuth token request',
-      correlationId,
-      email,
-      service: 'auth-service',
-      timestamp: new Date().toISOString()
-    }));
+    if (req.log) {
+      req.log.info({ email }, 'Processing OAuth token request');
+    }
 
     const result = await authService.handleOAuthToken({ email, name, provider, providerId });
     res.json(result);
@@ -31,20 +37,15 @@ router.post('/token', async (req, res, next) => {
 // POST /auth/validate - Validate JWT
 router.post('/validate', async (req, res, next) => {
   try {
-    const { token } = req.body;
-    const correlationId = req.headers['x-request-id'] || 'unknown';
-
-    if (!token) {
-      return res.status(400).json({ error: 'Token is required' });
+    const { error, value } = validateSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: error.details[0].message });
     }
+    const { token } = value;
 
-    console.log(JSON.stringify({
-      level: 'info',
-      message: 'Validating token',
-      correlationId,
-      service: 'auth-service',
-      timestamp: new Date().toISOString()
-    }));
+    if (req.log) {
+      req.log.info('Validating token');
+    }
 
     const result = await authService.validateToken(token);
 

@@ -1,8 +1,16 @@
+process.env.AUTH_SERVICE_URL = 'http://test';
+process.env.PRODUCT_SERVICE_URL = 'http://test';
+process.env.ORDER_SERVICE_URL = 'http://test';
+process.env.PAYMENT_SERVICE_URL = 'http://test';
+process.env.INTERNAL_SERVICE_KEY = 'test';
+
 const request = require('supertest');
 
 // Mock axios
 jest.mock('axios');
 const axios = require('axios');
+axios.interceptors = { request: { use: jest.fn() }, response: { use: jest.fn() } };
+axios.create = jest.fn(() => axios);
 
 // Mock uuid
 jest.mock('uuid', () => ({

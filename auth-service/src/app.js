@@ -1,8 +1,16 @@
 const express = require('express');
+const helmet = require('helmet');
 const authRoutes = require('./routes/authRoutes');
 const { loggerMiddleware } = require('./middleware/logger');
 
+if (!process.env.JWT_SECRET || !process.env.INTERNAL_SERVICE_KEY || !process.env.DATABASE_URL) {
+  console.error("CRITICAL: Missing essential environment variables in Auth Service");
+  process.exit(1);
+}
+
 const app = express();
+
+app.use(helmet());
 
 app.use(express.json());
 app.use(loggerMiddleware);
@@ -17,14 +25,9 @@ app.use('/auth', authRoutes);
 
 // Admin summary endpoint
 app.get('/admin/summary', (req, res) => {
-  const correlationId = req.headers['x-request-id'] || 'unknown';
-  console.log(JSON.stringify({
-    level: 'info',
-    message: 'Admin summary requested',
-    correlationId,
-    service: 'auth-service',
-    timestamp: new Date().toISOString()
-  }));
+  if (req.log) {
+    req.log.info('Admin summary requested');
+  }
   res.json({
     totalUsers: 2,
     activeUsers: 2,
@@ -35,14 +38,11 @@ app.get('/admin/summary', (req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  const correlationId = req.headers['x-request-id'] || 'unknown';
-  console.log(JSON.stringify({
-    level: 'error',
-    message: err.message,
-    correlationId,
-    service: 'auth-service',
-    timestamp: new Date().toISOString()
-  }));
+  if (req.log) {
+    req.log.error({ err }, err.message || 'Internal server error');
+  } else {
+    console.error(err);
+  }
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 

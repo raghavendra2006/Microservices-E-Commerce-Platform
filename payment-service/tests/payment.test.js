@@ -1,3 +1,7 @@
+process.env.DATABASE_URL = 'test';
+process.env.INTERNAL_SERVICE_KEY = 'test';
+process.env.ORDER_SERVICE_URL = 'http://test';
+
 const request = require('supertest');
 
 // Mock database

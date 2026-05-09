@@ -1,3 +1,6 @@
+process.env.DATABASE_URL = 'test';
+process.env.INTERNAL_SERVICE_KEY = 'test';
+
 const request = require('supertest');
 
 // Mock the database before requiring the app

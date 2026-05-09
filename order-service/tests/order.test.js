@@ -1,3 +1,7 @@
+process.env.PRODUCT_SERVICE_URL = 'http://test';
+process.env.DATABASE_URL = 'test';
+process.env.INTERNAL_SERVICE_KEY = 'test';
+
 const request = require('supertest');
 
 // Mock database
@@ -20,6 +24,8 @@ jest.mock('../src/config/database', () => {
 // Mock axios for inter-service calls
 jest.mock('axios');
 const axios = require('axios');
+axios.interceptors = { request: { use: jest.fn() }, response: { use: jest.fn() } };
+axios.create = jest.fn(() => axios);
 
 const app = require('../src/app');
 const { pool } = require('../src/config/database');
@@ -63,9 +69,9 @@ describe('Order Service', () => {
       const product = { id: 'prod-1', name: 'Test', price: 25.00, stock: 10 };
 
       // Mock product service call - get product
-      axios.get.mockResolvedValueOnce({ data: product });
+      axios.mockResolvedValueOnce({ data: product });
       // Mock product service call - deduct stock
-      axios.patch.mockResolvedValueOnce({ data: { ...product, stock: 8 } });
+      axios.mockResolvedValueOnce({ data: { ...product, stock: 8 } });
 
       // Mock database - BEGIN, INSERT order, INSERT item, COMMIT
       mockClient.query
@@ -92,7 +98,7 @@ describe('Order Service', () => {
 
     it('should return 400 for insufficient stock', async () => {
       const product = { id: 'prod-1', name: 'Test', price: 25.00, stock: 1 };
-      axios.get.mockResolvedValueOnce({ data: product });
+      axios.mockResolvedValueOnce({ data: product });
 
       const res = await request(app)
         .post('/orders')
@@ -123,7 +129,7 @@ describe('Order Service', () => {
     });
 
     it('should return 400 for non-existent product', async () => {
-      axios.get.mockRejectedValueOnce({ response: { status: 404 } });
+      axios.mockRejectedValueOnce({ response: { status: 404 } });
 
       const res = await request(app)
         .post('/orders')

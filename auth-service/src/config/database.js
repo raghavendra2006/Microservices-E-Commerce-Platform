@@ -1,17 +1,15 @@
 const { Pool } = require('pg');
+const { logger } = require('../middleware/logger');
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/auth_db'
+  connectionString: process.env.DATABASE_URL,
+  max: 20,
+  connectionTimeoutMillis: 2000,
+  idleTimeoutMillis: 30000
 });
 
 pool.on('error', (err) => {
-  console.error(JSON.stringify({
-    level: 'error',
-    message: 'Unexpected database error',
-    error: err.message,
-    service: 'auth-service',
-    timestamp: new Date().toISOString()
-  }));
+  logger.error({ err }, 'Unexpected database error');
 });
 
 module.exports = { pool };

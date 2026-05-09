@@ -1,8 +1,9 @@
 FROM node:18-alpine
 WORKDIR /app
 RUN apk add --no-cache wget
-COPY package*.json ./
+COPY --chown=node:node package*.json ./
 RUN npm ci --only=production
-COPY . .
+COPY --chown=node:node . .
 EXPOSE 8080
+USER node
 CMD ["node", "src/server.js"]

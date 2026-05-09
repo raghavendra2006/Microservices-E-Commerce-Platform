@@ -1,22 +1,37 @@
-function loggerMiddleware(req, res, next) {
-  const correlationId = req.headers['x-request-id'] || 'unknown';
-  const start = Date.now();
+const pino = require('pino');
+const pinoHttp = require('pino-http');
 
-  res.on('finish', () => {
-    console.log(JSON.stringify({
-      level: 'info',
-      message: `${req.method} ${req.originalUrl} ${res.statusCode}`,
-      correlationId,
-      service: 'order-service',
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  formatters: {
+    level: (label) => {
+      return { level: label };
+    },
+  },
+  base: {
+    service: 'order-service'
+  }
+});
+
+const loggerMiddleware = pinoHttp({
+  logger,
+  customProps: (req, res) => {
+    return {
+      correlationId: req.headers['x-request-id'] || 'unknown',
+    };
+  },
+  serializers: {
+    req: (req) => ({
       method: req.method,
-      path: req.originalUrl,
+      url: req.url,
+      headers: {
+        'x-request-id': req.headers['x-request-id'],
+      }
+    }),
+    res: (res) => ({
       statusCode: res.statusCode,
-      duration: Date.now() - start,
-      timestamp: new Date().toISOString()
-    }));
-  });
+    })
+  }
+});
 
-  next();
-}
-
-module.exports = { loggerMiddleware };
+module.exports = { logger, loggerMiddleware };

@@ -1,9 +1,17 @@
 const express = require('express');
+const helmet = require('helmet');
 const paymentRoutes = require('./routes/paymentRoutes');
 const { serviceAuthMiddleware } = require('./middleware/serviceAuth');
 const { loggerMiddleware } = require('./middleware/logger');
 
+if (!process.env.INTERNAL_SERVICE_KEY || !process.env.DATABASE_URL || !process.env.ORDER_SERVICE_URL) {
+  console.error("CRITICAL: Missing essential environment variables in Payment Service");
+  process.exit(1);
+}
+
 const app = express();
+
+app.use(helmet());
 
 app.use(express.json());
 app.use(loggerMiddleware);
@@ -19,14 +27,11 @@ app.use('/payments', paymentRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
-  const correlationId = req.headers['x-request-id'] || 'unknown';
-  console.log(JSON.stringify({
-    level: 'error',
-    message: err.message,
-    correlationId,
-    service: 'payment-service',
-    timestamp: new Date().toISOString()
-  }));
+  if (req.log) {
+    req.log.error({ err }, err.message || 'Internal server error');
+  } else {
+    console.error(err);
+  }
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 
